@@ -1,6 +1,7 @@
-import gzip, io, sys, urllib.request
+import gzip, io, sys, urllib.request, datetime
 import xml.etree.ElementTree as ET
 
+# EPG sources (country files). Missing ones are skipped automatically.
 SOURCES = [
     "https://epgshare01.online/epgshare01/epg_ripper_ES1.xml.gz",
     "https://epgshare01.online/epgshare01/epg_ripper_FR1.xml.gz",
@@ -10,81 +11,179 @@ SOURCES = [
     "https://epgshare01.online/epgshare01/epg_ripper_PE1.xml.gz",
     "https://epgshare01.online/epgshare01/epg_ripper_CO1.xml.gz",
     "https://epgshare01.online/epgshare01/epg_ripper_CL1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_CR1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_EC1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_DO1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_PA1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_SV1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_GT1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_HN1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_NI1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_UY1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_VE1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_PR1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_US1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_CH1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_BE2.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_MU1.xml.gz",
+    "https://epgshare01.online/epgshare01/epg_ripper_LU1.xml.gz",
 ]
 
+# Only channels in this list are kept, so the guide stays small for UHF.
 KEEP = {
-    '13Rue.fr', '13emeRue.mu', '24Horas.es', '6ter.fr', '7TVRegionMurcia.es', 'AB1.fr',
-    'ABXploreFR.be', 'AMC.es', 'AMITele.ca', 'APunt.es', 'ARTE.fr', 'ARTV.ca',
-    'AXN.es', 'AXNMovies.es', 'Action.fr', 'AddikTV.ca', 'Animaux.fr', 'Antena3.es',
-    'Antena3Internacional.es', 'AragonTV.es', 'AragonTVInt.es', 'AssembleeNationale.ca', 'Atreseries.es', 'AutoPlus.fr',
-    'AztecaUno.mx', 'BBCFood.es', 'BBCHistory.es', 'BBCWorld.es', 'BFMBusiness.fr', 'BFMLyon.fr',
-    'BFMMarseille.fr', 'BFMTV.fr', 'BOMCine.es', 'BabyTV.es', 'BeMad.es', 'Bloomberg.es',
-    'Boing.es', 'Boomerang.fr', 'CGTNEspanol.cn', 'CGTNEspanol.es', 'CGTNFrench.cn', 'CNNInt.es',
-    'CNews.fr', 'CPAC.ca', 'CStar.fr', 'Calle13.es', 'CanalCocina.es', 'CanalD.ca',
-    'CanalDecasa.es', 'CanalEvasion.ca', 'CanalExtremadura.es', 'CanalExtremaduraSat.es', 'CanalHistoria.es', 'CanalPlus.fr',
-    'CanalPlusBoxOffice.fr', 'CanalPlusCinema.fr', 'CanalPlusDocs.fr', 'CanalPlusFamily.mu', 'CanalPlusFoot.fr', 'CanalPlusGrandEcran.fr',
-    'CanalPlusKids.fr', 'CanalPlusPremierLeague.fr', 'CanalPlusSport360.fr', 'CanalSavoir.ca', 'CanalSur.es', 'CanalSur2.es',
-    'CanalSurAndalucia.es', 'CanalVie.ca', 'Canalj.fr', 'Caracol.co', 'CartoonNetwork.fr', 'Cartoonito.fr',
-    'CasaTV.ca', 'CastillalaManchaTV.es', 'ChassePeche.fr', 'CinePlusClassic.fr', 'CinePlusClub.mu', 'CinePlusEmotion.fr',
-    'CinePlusFestival.fr', 'CinePlusFrisson.fr', 'Cinepop.ca', 'ClanTVE.es', 'ComediePlus.mu', 'ComedyCentral.es',
-    'ComedyCentral.fr', 'Cosmo.es', 'CrimeDistrict.fr', 'Cuatro.es', 'Cubavision.cu', 'DAZN1.es',
-    'DAZN2.es', 'DKiss.es', 'DMAX.es', 'Discovery.es', 'DiscoveryChannel.fr', 'DiscoveryInvestigation.fr',
-    'DiscoveryScience.fr', 'DisneyChannel.fr', 'DisneyJunior.es', 'EITBBasque.es', 'ETB1.es', 'ETB2.es',
-    'ETB3.es', 'El13.ar', 'ElToroTV.es', 'ElleFictions.ca', 'Equidia.fr', 'Esport3.es',
-    'Euronews.es', 'Euronews.fr', 'Eurosport1.es', 'Eurosport1.fr', 'Eurosport2.es', 'Eurosport2.fr',
-    'Eurosport3601.fr', 'Explora.ca', 'France2.fr', 'France24.fr', 'France3.fr', 'France4.fr',
-    'France5.fr', 'FranceInfo.fr', 'FrissonsTV.ca', 'GolfPlus.fr', 'Gulli.fr', 'Histoire.fr',
-    'I24News.fr', 'ICIRadioCanadaOttawa.ca.ca', 'ICITeleMontreal.ca', 'ICITeleToronto.ca', 'IDF1.fr', 'ImagenTV.mx',
-    'InfosportPlus.fr', 'Investigation.ca', 'KTO.fr', 'LA1.es', 'LA2.es', 'LAT| A&E HD',
-    'LAT| AMC HD', 'LAT| AXN HD', 'LAT| BABY TV HD', 'LAT| DE PELICULA HD', 'LAT| DISCOVERY TURBO HD', 'LAT| H2 HD',
-    'LAT| HISTORY 2 HD', 'LAT| LIFETIME HD', 'LAT| MULTIMEDIOS PLUS HD', 'LAT| SUNDANCE TV HD', 'LAT| UNIMAS NEW YORK HD', 'LCI.fr',
-    'LEquipe.mu', 'LEquipe21.fr', 'LSV| CANAL 19', 'LSV| CANAL 6', 'LSV| MEGAVISION CANAL 21', 'LaChaineMeteo.fr',
-    'LaChaineParlementaire.fr', 'LaOtra.es', 'LaSexta.es', 'LeCanalNouvelles.ca', 'M6.fr', 'M6Music.fr',
-    'MAX.ca', 'MGGTV.fr', 'MPlusAccion.es', 'MPlusCineEspanol.es', 'MPlusClasicos.es', 'MPlusComedia.es',
-    'MPlusDocumentales.es', 'MPlusDrama.es', 'MPlusHits.es', 'MPlusIndie.es', 'MPlusLaligaTV.es', 'MPlusLaligaTV2.es',
-    'MPlusLaligaTV3.es', 'MPlusOriginales.es', 'MTV.es', 'MTV.fr', 'MTV00s.es', 'Mangas.fr',
-    'MaxAvances.es', 'Mega.es', 'Mezzo.es', 'Mezzo.fr', 'MezzoLive.es', 'MezzoLive.fr',
-    'Moicie.ca', 'MovistarPlus.pe', 'MovistarPlusPlus.es', 'MovistarPlusPlus2.es', 'NHKWorld.jp', 'NRJHits.fr',
-    'NatGeoWild.es', 'NationalGeographic.es', 'NationalGeographic.fr', 'NavarraTV.es', 'NegociosTV.es', 'Neox.es',
-    'NickJr.es', 'NickJr.fr', 'Nickelodeon.es', 'Nickelodeon.fr', 'NickelodeonJunior.fr', 'NickelodeonTeen.fr',
-    'Noovo.ca', 'Nouvelles.ca', 'Nova.es', 'NovelasTV.fr', 'OCS.fr', 'OLTV.fr',
-    'Odisea.es', 'OlympiaTv.fr', 'ParamountNetwork.es', 'ParisPremiere.fr', 'PeruMagico.pe', 'PiwiPlus.mu',
-    'PlanetePlus.fr', 'PlanetePlusCrime.mu', 'Polar.fr', 'Prise2.ca', 'RDINews.ca', 'RDS.ca',
-    'RDS2.ca', 'RDSInfo.ca', 'RFMTV.fr', 'RMCDecouverte.fr', 'RMCMystere.fr', 'RMCSport1.fr',
-    'RMCSport2.fr', 'RMCTalkSport.fr', 'RMCstory.fr', 'RMCwow.fr', 'RTL9.lu', 'RTl9.mu',
-    'RealMadridTV.es', 'Seasons.fr', 'Seasons.mu', 'Serieclub.fr', 'SeriesPlus.ca', 'SolMusica.es',
-    'Somos.es', 'StarChannel.es', 'StarzKidsFamily.us', 'StingrayDjazz.fr', 'SuperEcran.ca', 'SuperEcran2.ca',
-    'SuperEcran3.ca', 'SuperEcran4.ca', 'Syfy.fr', 'TCM.es', 'TCM.fr', 'TF1.fr',
-    'TF1SeriesFilms.fr', 'TFO.ca', 'TFX.fr', 'TLC.fr', 'TMC.fr', 'TN.ar',
-    'TV3.es', 'TV3Cat.es', 'TV5Monde.es', 'TV5Monde.fr', 'TVA.ca', 'TVASports.ca',
-    'TVASports2.ca', 'TVCanarias.es', 'TVGEuropa.es', 'TeleQuebec.ca', 'TeleToonPlus.fr', 'Telecinco.es',
-    'Teledeporte.es', 'TeletoonPlus.mu', 'Ten.es', 'Teva.fr', 'Tiji.fr', 'TouteHistoire.fr',
-    'TraceAfrica.fr', 'TraceCaribbean.fr', 'TraceSportStars.fr', 'TraceUrban.fr', 'Trece.es', 'Trek.fr',
-    'TvBreizh.fr', 'Ubeat.es', 'UnisTV.ca', 'UshuaiaTV.fr', 'W9.fr', 'WIPRTV.us',
-    'WarnerTV.es', 'WarnerTV.fr', 'Xtrm.es', 'ZTele.ca', 'Zeste.ca', 'ca.Historia',
-    'ca.ICI (CBUFT) Vancouver, BC', 'ca.RDS Info', 'ca.SRC Ottawa', 'ca.tv5-international-west', 'es.#Vamos', 'la.CGTN (CCTV4)',
-    'la.Canal 2 de Panamá (TVN-2)', 'la.Canal 9 de Panamá (TVMax)', 'la.Canal A&E (Latinoamérica)', 'la.Canal AMC (México)', 'la.Canal AYM Sports', 'la.Canal America TV',
-    'la.Canal Azteca Uno', 'la.Canal Baby TV', 'la.Canal CNN Internacional', 'la.Canal Capital (Colombia)', 'la.Canal De Película', 'la.Canal De Película Clásico',
-    'la.Canal ESPN Deportes', 'la.Canal Fox Deportes', 'la.Canal Golden Plus', 'la.Canal Lifetime', 'la.Canal Starz Encore Español', 'la.Canal Sundance TV',
-    'la.Canal TV Chile', 'la.Canal Teleamazonas', 'la.Canal Telefórmula', 'la.Canal Telemundo (México)', 'la.Canal Univision TLNovelas', 'la.Canal WAPA-TV',
-    'la.Canal beIN Sport en Español', 'la.CentroAmérica TV', 'la.Discovery Turbo', 'la.TUDN', 'la.Telemundo  - Pacific Feed', 'la.Telemundo (KBLR) Las Vegas, NV',
-    'la.Telemundo (KNSO) Fresno, CA', 'la.Telemundo (KTAZ) Phoenix, AZ', 'la.Telemundo (KTMD) Houston, TX', 'la.Telemundo (KVEA) Los Angeles, CA', 'la.Telemundo (KXTX) Dallas, TX', 'la.Telemundo (WKAQ) San Juan, PR',
-    'la.Telemundo (WKTB-CD2) Atlanta, GA', 'la.Telemundo (WNEU) Manchester, MA HD', 'la.Telemundo (WNJU) Teterboro, NJ', 'la.Telemundo (WSCV) Fort Lauderdale, FL', 'la.Telemundo (WSNS) Chicago, IL', 'la.Telemundo (WZDC) Washington, DC',
-    'la.UNI (KAKW) Austin, TX HD', 'la.UNI (KFTV) Fresno, CA', 'la.UNI (KMEX) Los Angeles, CA', 'la.UNI (KUVN) Dallas, TX', 'la.UNI (KXLN) Houston, TX', 'la.UNI (WFTY-DT2) New York, NY',
-    'la.UNI (WGBO) Chicago, IL', 'la.UNI (WLTV) Miami, FL', 'la.UNI (WLTV) Miami, FL HD', 'la.UNI (WUVG) Atlanta, GA', 'la.UniMás  - Network Pacific', 'la.UniMás (KMEX-DT2) Los Angeles, CA',
-    'la.UniMás (KSTR) Dallas, TX', 'la.UniMás (WFUT) New York, NY', 'la.Univision - Eastern Feed', 'la.Univision - Pacific Feed', 'mx.Canal 4 de Monterrey (XEFB-TDT)', 'mx.Canal AZ Mundo',
-    'mx.Canal BitMe', 'mx.Canal Clan TVE', 'mx.Canal De Película Clásico', 'mx.Canal Golden Plus', 'mx.Canal HLN', 'mx.Canal Multimedios',
-    'mx.Canal Multimedios Plus', 'mx.Canal Pasiones (Latinoamérica)', 'mx.Canal TUDN (México)', 'mx.Canal Telefórmula', 'mx.Canal Unicable (México)', 'sv.Canal 12 de El Salvador',
-    'sv.Canal 2 de El Salvador', 'sv.Canal 21 de El Salvador (Megavisión)', 'sv.Canal 4 de El Salvador',
+    '13Rue.fr', '13emeRue.fr', '13emeRue.mu', '24Horas.es', '3CatInfo.es', '6ter.fr',
+    '7TVRegionMurcia.es', '88Stereo.cr', 'A24.ar', 'AB1.fr', 'AB3.be', 'ABXploreFR.be',
+    'ACSNetwork.pr', 'ADN40.mx', 'AMC.es', 'AMCBreak.es', 'AMCCrime.es', 'AMCLiving.es',
+    'AMCTV.cl', 'AMITele.ca', 'ANTV.pa', 'APlus.fr', 'APunt.es', 'ARTE.fr',
+    'ARTV.ca', 'ATV.pe', 'ATVSur.pe', 'AXN.es', 'AXNMovies.es', 'Action.fr',
+    'AddikTV.ca', 'AdultSwim.us', 'Africa24.fr', 'AguacateTV.ve', 'AlcarriaTV.es', 'AllFlamenco.es',
+    'Ame47.do', 'AmericaTV.ar', 'AmericaTeVe.pr', 'AndaluciaTelevision.es', 'AnimalPlanet.us', 'Animaux.fr',
+    'Antena3.es', 'Antena3Internacional.es', 'AntenaSeisTV.cr', 'AnzoateguiTV.ve', 'AragonTV.es', 'AragonTVInt.es',
+    'ArgentinisimaSatelital.ar', 'Asomavision.ec', 'AssembleeNationale.ca', 'Atreseries.es', 'AutoPlus.fr', 'Automotolachaine.fr',
+    'AvivamientoTV.co', 'AyMSports.mx', 'AzCorazon.mx', 'AzMundo.mx', 'Azteca7.mx', 'AztecaInternacional.mx',
+    'AztecaUno.mx', 'BBCFood.es', 'BBCFood.us', 'BBCHistory.es', 'BBCWorld.es', 'BET.fr',
+    'BFM2.fr', 'BFMAlsace.fr', 'BFMBusiness.fr', 'BFMCotedAzur.fr', 'BFMDICIAlpesduSud.fr', 'BFMDICIHauteProvence.fr',
+    'BFMGrandLille.fr', 'BFMGrandLittoral.fr', 'BFMLyon.fr', 'BFMMarseille.fr', 'BFMNormandie.fr', 'BFMParisIledeFrance.fr',
+    'BFMTV.fr', 'BFMVar.fr', 'BOMCine.es', 'BabyTV.es', 'Bandamax.mx', 'BarcaTV.es',
+    'BblackCaribbean.fr', 'BeMad.es', 'BebetoTV.do', 'BetisTV.es', 'Bloomberg.es', 'BloombergTV.us',
+    'Boing.es', 'Boing.fr', 'Boomerang.fr', 'Boomerang.us', 'BravoTV.ar', 'C5N.ar',
+    'C8.fr', 'CDMInternacional.pr', 'CDN.do', 'CDNDeportes.do', 'CDO.cl', 'CGTNEspanol.cn',
+    'CGTNEspanol.es', 'CGTNFrench.cn', 'CMMTV.es', 'CNBC.us', 'CNEWSPRIME.fr', 'CNN.us',
+    'CNNChile.cl', 'CNNInt.es', 'CNews.fr', 'COSMO.es', 'CPAC.ca', 'CStar.fr',
+    'Caillou.fr', 'Calle13.es', 'Calle13Universal.es', 'Canal1.co', 'Canal10TV.mx', 'Canal11.cr',
+    'Canal13.ar', 'Canal19.mx', 'Canal2.co', 'Canal26.ar', 'Canal26.mx', 'Canal27.gt',
+    'Canal3.gt', 'Canal4.cr', 'Canal4Paysandu.uy', 'Canal5.mx', 'Canal6.es', 'Canal7TV.ar',
+    'Canal8.hn', 'Canal9.es', 'CanalAntigua.gt', 'CanalCapital.co', 'CanalCocina.es', 'CanalCosta.es',
+    'CanalD.ca', 'CanalDecasa.es', 'CanalEvasion.ca', 'CanalExtremadura.es', 'CanalExtremaduraSat.es', 'CanalExtremaduraSatelite.es',
+    'CanalHistoria.es', 'CanalHollywood.es', 'CanalJ.fr', 'CanalLuz.ar', 'CanalM.uy', 'CanalN.pe',
+    'CanalOnce.mx', 'CanalPanda.es', 'CanalParlamento.es', 'CanalPlus.fr', 'CanalPlusBoxOffice.fr', 'CanalPlusCaraibes.fr',
+    'CanalPlusCinema.fr', 'CanalPlusDocs.fr', 'CanalPlusFamily.mu', 'CanalPlusFoot.fr', 'CanalPlusGrandEcran.fr', 'CanalPlusKids.fr',
+    'CanalPlusPremierLeague.fr', 'CanalPlusSport.fr', 'CanalPlusSport1.fr', 'CanalPlusSport2.fr', 'CanalPlusSport3.fr', 'CanalPlusSport360.fr',
+    'CanalPlusSport4.fr', 'CanalPlusSport5.fr', 'CanalRural.ar', 'CanalSavoir.ca', 'CanalSur.es', 'CanalSur2.es',
+    'CanalSurAndalucia.es', 'CanalTRO.co', 'CanalTVCosta.co', 'CanalVie.ca', 'Canalj.fr', 'CanelaTV.ec',
+    'CantinaTV.ve', 'Caracol.co', 'CaracolTV.co', 'CartagoMediosTV.cr', 'CartoonNetwork.ca', 'CartoonNetwork.es',
+    'CartoonNetwork.fr', 'Cartoonito.fr', 'CasaTV.ca', 'CastillalaManchaTV.es', 'CazayPesca.es', 'ChacraTV.ar',
+    'ChassePeche.fr', 'ChileChannel.cl', 'ChileVision.cl', 'CineEstelar.us', 'CineNostalgia.us', 'CinePlusClassic.fr',
+    'CinePlusClub.mu', 'CinePlusEmotion.fr', 'CinePlusFamily.fr', 'CinePlusFestival.fr', 'CinePlusFrisson.fr', 'CineWestern.fr',
+    'Cinecanal.us', 'CinemaDinamita.mx', 'Cinemax.us', 'Cinepop.ca', 'CinesVerdi.es', 'CityChannel.mx',
+    'Clan.es', 'ClanTVE.es', 'ClaroCinema.mx', 'ClaroSports.mx', 'Classica.us', 'ColosalTV.cr',
+    'ComediePlus.fr', 'ComediePlus.mu', 'ComedyCentral.es', 'ComedyCentral.fr', 'Condavision.es', 'Cosmo.es',
+    'Cosmovision.co', 'CostaRicaChannel.cr', 'CotoBrusTV.cr', 'CrimeDistrict.fr', 'CronicaTV.ar', 'Cuatro.es',
+    'Cubavision.cu', 'DAZN1.es', 'DAZN2.es', 'DHE.us', 'DKISS.es', 'DKiss.es',
+    'DMAX.es', 'DTV.pe', 'Dark.es', 'DbikeChannel.us', 'DePeliculaPlus.mx', 'DeportesTVC.hn',
+    'DeportesporMovistarPlusPlus.es', 'Digital15.do', 'Digital809TV.do', 'Discovery.es', 'DiscoveryChannel.es', 'DiscoveryChannel.fr',
+    'DiscoveryFamilia.us', 'DiscoveryInvestigation.fr', 'DiscoveryScience.fr', 'DiscoveryScience.us', 'DiscoveryTurbo.us', 'DiscoveryWorld.us',
+    'DisneyChannel.es', 'DisneyChannel.fr', 'DisneyJr.fr', 'DisneyJunior.es', 'DisneyXD.us', 'DistritoComedia.mx',
+    'Divinity.es', 'DreamWorksChannel.es', 'E.fr', 'E.us', 'EITBBasque.es', 'EMCITV.fr',
+    'ESPN.us', 'ESPN2.us', 'ESPNDeportes.us', 'ESPNPremium.ar', 'ETB1.es', 'ETB2.es',
+    'ETB3.es', 'ETB4.es', 'ETBBasque.es', 'EWTN.us', 'EXCTV.ve', 'EcuadorTV.ec',
+    'Ecuavisa.ec', 'El13.ar', 'ElCanaldelFutbol.ec', 'ElCanaldelFutbol2.ec', 'ElClubdelaComedia.es', 'ElGourmet.ar',
+    'ElPaisTV.es', 'ElToroTV.es', 'ElTrece.ar', 'ElleFictions.ca', 'Encuentro.ar', 'Energy.es',
+    'Enfamilia.es', 'Enlace.cr', 'Equidia.fr', 'Esport3.es', 'EstrellaNews.us', 'Euronews.es',
+    'Euronews.fr', 'EuropaEuropa.ar', 'Europe1TV.fr', 'Europe2PopTV.fr', 'Eurosport.fr', 'Eurosport1.es',
+    'Eurosport1.fr', 'Eurosport2.es', 'Eurosport2.fr', 'Eurosport3601.fr', 'Eurosport360HD1.fr', 'Eurosport360HD2.fr',
+    'Eurosport360HD3.fr', 'Eurosport360HD4.fr', 'Eurosport360HD5.fr', 'Eurosport360HD6.fr', 'Eurosport360HD7.fr', 'Eurosport360HD8.fr',
+    'EvangileTV.fr', 'Explora.ca', 'Extra.ar', 'ExtraTV42.cr', 'ExtremaTV.cr', 'FUTV.cr',
+    'FX.mx', 'FXM.us', 'FactoriadeFiccion.es', 'FarodeSantidadTV.pr', 'FashionTVEurope.fr', 'FilmArts.ar',
+    'FilmCo.es', 'Flooxer.es', 'FoodNetwork.us', 'FootPlus.fr', 'FootPlus2424.fr', 'Foro.mx',
+    'FoxDeportes.us', 'FoxNewsChannel.us', 'FoxSports.mx', 'FoxSports1.cl', 'FoxSports2.mx', 'FoxSports3.mx',
+    'FoxSportsPremium.mx', 'France2.fr', 'France24.fr', 'France3.fr', 'France4.fr', 'France5.fr',
+    'FranceInfo.fr', 'FranceTVSeries.fr', 'FrissonsTV.ca', 'FuegoTV.do', 'GHTelevision.do', 'Galavision.us',
+    'GaliciaTVEuropa.es', 'GarageTV.es', 'GexTV.cr', 'Globovision.ve', 'GoTV.hn', 'Gol.es',
+    'GolPeru.pe', 'Golden.mx', 'GoldenEdge.mx', 'GoldenPlus.mx', 'GolfChannel.fr', 'GolfChannel.us',
+    'GolfPlus.fr', 'Guatevision.gt', 'Gulli.fr', 'HBO.us', 'HBO2.us', 'HBOFamily.us',
+    'HBOSignature.us', 'HCH.hn', 'HGTV.us', 'HLN.us', 'HOLAPlay.es', 'HQMKids.es',
+    'HTV.us', 'Histoire.fr', 'HistoireTV.fr', 'Historia.ca', 'Historia.es', 'History.mx',
+    'HolaTV.us', 'I24News.fr', 'IB3.es', 'ICIRadioCanadaOttawa.ca.ca', 'ICITeleMontreal.ca', 'ICITeleToronto.ca',
+    'IDF1.fr', 'ISat.ar', 'IVC.ve', 'IberaliaOriginalHD.es', 'ImagenTV.mx', 'IndiePlex.us',
+    'InfosportPlus.fr', 'Investigation.ca', 'InvestigationDiscovery.us', 'Italianissimo.ve', 'JOne.fr', 'KTO.fr',
+    'Kidz.es', 'L1.pe', 'L1Max.pe', 'LA1.es', 'LA2.es', 'LCI.fr',
+    'LCP.fr', 'LEquipe.fr', 'LEquipe.mu', 'LEquipe21.fr', 'LFMTV.ch', 'La1.es',
+    'La2.es', 'La7.es', 'LaChaineMeteo.fr', 'LaChaineParlementaire.fr', 'LaKalle.co', 'LaLigaHypermotion.es',
+    'LaLigaHypermotion2.es', 'LaLigaHypermotion3.es', 'LaLigaTVBar.es', 'LaNacionPlus.ar', 'LaOtra.es', 'LaRed.cl',
+    'LaResistencia.es', 'LaRutaTV.do', 'LaSexta.es', 'LaX.pr', 'LancelotTV.es', 'LasEstrellas.mx',
+    'Latina.pe', 'LeCanalNouvelles.ca', 'LebrijaTV.es', 'Lifetime.us', 'LimonTV.cr', 'LogosTV.es',
+    'LosSantosTV.cr', 'LuckyJacktv.lu', 'Ludikids.fr', 'LuxeTV.lu', 'M6.fr', 'M6Music.fr',
+    'MAX.ca', 'MBCSat.mu', 'MCM.fr', 'MCMPop.fr', 'MCMTop.fr', 'MGGTV.fr',
+    'MPlusAccion.es', 'MPlusCineEspanol.es', 'MPlusClasicos.es', 'MPlusComedia.es', 'MPlusDocumentales.es', 'MPlusDrama.es',
+    'MPlusHits.es', 'MPlusIndie.es', 'MPlusLaligaTV.es', 'MPlusLaligaTV2.es', 'MPlusLaligaTV3.es', 'MPlusOriginales.es',
+    'MTV.es', 'MTV.fr', 'MTV00s.es', 'MTVClassic.us', 'MTVHits.fr', 'MTVLive.us',
+    'Mangas.fr', 'MariaVision.mx', 'MarmitonTV.fr', 'MasterVideo.pr', 'MaxAvances.es', 'Mega.es',
+    'Melody.fr', 'MeridianoTV.ve', 'Mezzo.es', 'Mezzo.fr', 'MezzoLive.es', 'MezzoLive.fr',
+    'MiavisionTV.do', 'MilenioTV.ar', 'MirameTV.es', 'Moicie.ca', 'MonacoInfo.mc', 'MovieMax.us',
+    'MoviePlex.us', 'MovistarPlus.pe', 'MovistarPlusPlus.es', 'MovistarPlusPlus2.es', 'MultiSports1.fr', 'MultiSports2.fr',
+    'MultiSports3.fr', 'MultiSports4.fr', 'MultiSports5.fr', 'MultimediosMonterrey.mx', 'MultimediosPlus.mx', 'NBCUniverso.us',
+    'NETTV.ar', 'NGFederal.ar', 'NGRadioTV.pr', 'NHKWorld.jp', 'NOVO19.fr', 'NRJ12.fr',
+    'NRJHits.fr', 'NatGeoMundo.us', 'NatGeoWild.es', 'NationalGeographic.es', 'NationalGeographic.fr', 'NavarraTV.es',
+    'NegociosTV.es', 'Neox.es', 'NewsmaxTV.us', 'NickJr.es', 'NickJr.fr', 'Nickelodeon.es',
+    'Nickelodeon.fr', 'NickelodeonJunior.fr', 'NickelodeonTeen.fr', 'NollywoodTV.fr', 'Noovo.ca', 'NorteInformativoTV.cr',
+    'Nouvelles.ca', 'Nova.es', 'NovelasTV.fr', 'Novelisima.us', 'OCS.fr', 'OLTV.fr',
+    'ORBITTV.do', 'Odisea.es', 'OldiesHits.cr', 'OlympiaTv.fr', 'OndaAlgeciras.es', 'One.ca',
+    'OutdoorChannel.us', 'OuterMax.us', 'PXSports.mx', 'PanamericanaTV.pe', 'Panavision.ve', 'ParamountChannelOffset.fr',
+    'ParamountNetwork.es', 'ParamountNetwork.fr', 'ParisPremiere.fr', 'Pasiones.us', 'Pequeradio.es', 'PeruMagico.pe',
+    'PiwiPlus.fr', 'PiwiPlus.mu', 'PlanetePlus.fr', 'PlanetePlusAventure.fr', 'PlanetePlusCanada.ca', 'PlanetePlusCrime.fr',
+    'PlanetePlusCrime.mu', 'Polar.fr', 'PolarPlus.fr', 'PopularTVMelilla.es', 'Prise2.ca', 'PuntoTV.do',
+    'RCNNovelas.co', 'RDINews.ca', 'RDS.ca', 'RDS2.ca', 'RDSInfo.ca', 'RFMTV.fr',
+    'RMCDecouverte.fr', 'RMCLife.fr', 'RMCMystere.fr', 'RMCSport1.fr', 'RMCSport2.fr', 'RMCSportAccess1.fr',
+    'RMCSportLive5.fr', 'RMCSportLive6.fr', 'RMCSportLive7.fr', 'RMCSportLive8.fr', 'RMCStory.fr', 'RMCTalkSport.fr',
+    'RMCstory.fr', 'RMCwow.fr', 'RPCTV.pa', 'RTL9.lu', 'RTS.ec', 'RTS1.ch',
+    'RTS2.ch', 'RTl9.mu', 'RadioIslaTV.pr', 'RadioYaucanaTV.pr', 'RealMadridTV.es', 'RhemaTV.gt',
+    'Runtime.us', 'RuntimeAccion.es', 'RuntimeCineSeries.es', 'RuntimeClasicos.es', 'RuntimeComedia.es', 'RuntimeCrimen.es',
+    'RuntimeRomance.es', 'RuntimeSeries.es', 'RuntimeThriller.es', 'SalvacionTV.pr', 'SciFi.fr', 'ScienceVieTV.fr',
+    'Seasons.fr', 'Seasons.mu', 'Selekt.es', 'SenalColombia.co', 'SerieClub.fr', 'Serieclub.fr',
+    'SeriesPlus.ca', 'SolMusica.es', 'Somos.es', 'SonyChannel.mx', 'SophiaTV.es', 'Space.ar',
+    'SportenFrance.fr', 'Squirrel.es', 'Squirrel2.es', 'StarAction.us', 'StarChannel.es', 'StarClassics.us',
+    'StarComedy.us', 'StarFun.us', 'StarHits.us', 'StarSeries.us', 'Starz.us', 'StarzComedy.us',
+    'StarzEdge.us', 'StarzEncore.us', 'StarzEncoreAction.us', 'StarzEncoreBlack.us', 'StarzEncoreClassic.us', 'StarzEncoreFamily.us',
+    'StarzEncoreSuspense.us', 'StarzKidsFamily.us', 'StingrayDjazz.fr', 'StingrayRetro.ca', 'SundanceTV.es', 'SuperEcran.ca',
+    'SuperEcran2.ca', 'SuperEcran3.ca', 'SuperEcran4.ca', 'SuperTV55.do', 'SurPeru.pe', 'SuramTV.co',
+    'Syfy.es', 'Syfy.fr', 'T18.fr', 'T5Satelital.ar', 'TCM.es', 'TCM.fr',
+    'TCMCinema.fr', 'TCTelevision.ec', 'TDMas.cr', 'TEN.es', 'TENCanal10.hn', 'TF1.fr',
+    'TF1SeriesFilms.fr', 'TFO.ca', 'TFX.fr', 'TLC.fr', 'TLC.us', 'TMC.fr',
+    'TN.ar', 'TN23.gt', 'TNT.es', 'TNTNovelas.us', 'TNTSports.mx', 'TRU.ar',
+    'TRV.ve', 'TUDN.mx', 'TV3.es', 'TV3Cat.es', 'TV5Monde.es', 'TV5Monde.fr',
+    'TV5MondeFranceBelgiumSwitzerlandMonaco.fr', 'TV8MontBlanc.fr', 'TVA.ca', 'TVASports.ca', 'TVASports2.ca', 'TVBreizh.fr',
+    'TVC.mx', 'TVCDeportes.mx', 'TVCanarias.es', 'TVDecouverte.ch', 'TVES.hn', 'TVEStar.es',
+    'TVFamilia.ve', 'TVGEuropa.es', 'TVGirona.es', 'TVGuanajuato.mx', 'TVMAX.pe', 'TVMonaco.mc',
+    'TVN.cl', 'TVNosara.cr', 'TVPeru.pe', 'TVPitchoun.fr', 'TVVenezuela.ve', 'TeleFormula.mx',
+    'TeleQuebec.ca', 'TeleToonPlus.fr', 'Teleamazonas.pe', 'Telecafe.co', 'Telecanal12.do', 'Telecaribe.co',
+    'Teleceiba.hn', 'Telecinco.es', 'Telecolor.ve', 'Teledeporte.es', 'TelediarioTV.ar', 'Telefe.ar',
+    'Telefides.cr', 'TelehitMusica.mx', 'Teleislas.co', 'Telemadrid.es', 'TelemadridINT.es', 'Telemax.mx',
+    'Telemedellin.co', 'Telemetro.pa', 'Telemundo.us', 'Telenord.ar', 'Telenorte.ni', 'Teleonuba.es',
+    'Telepacifico.co', 'Teleritmo.mx', 'Telesistema.cr', 'Telesistema11.do', 'Telesur.ve', 'Teletica7.cr',
+    'TeletoonPlus.fr', 'TeletoonPlus.mu', 'TeletrakTV.cl', 'Teleunion.do', 'Teleuniverso.do', 'Televen.ve',
+    'TelevisaTijuana.mx', 'TelevisionLocaleduCholetais.fr', 'TelevisionMelilla.es', 'TelevisionPublica.ar', 'TelevisiondeGalicia.es', 'Ten.es',
+    'Teva.fr', 'Tevecat.es', 'TheRetroChannel.pr', 'TiJi.fr', 'TigoSports.cr', 'Tiji.fr',
+    'Toonami.fr', 'Tooncast.us', 'Toros.es', 'TouteHistoire.fr', 'ToutelHistoire.fr', 'TraceAfrica.fr',
+    'TraceAyiti.fr', 'TraceCaribbean.fr', 'TraceLatina.fr', 'TraceSportStars.fr', 'TraceUrban.fr', 'Trece.es',
+    'Trek.fr', 'TvBreizh.fr', 'TyCSports.ar', 'Ubeat.es', 'UniMas.us', 'Unicable.mx',
+    'UnisTV.ca', 'UniversalCinema.us', 'UniversalComedy.us', 'UniversalCrime.us', 'UniversalPremiere.us', 'UniversalReality.us',
+    'Univision.us', 'UshuaiaTV.fr', 'VH1.us', 'VICETV.us', 'VTV.ar', 'VamosporMovistarPlusPlus.es',
+    'VePlus.ve', 'Venevision.ve', 'Veo7.es', 'VideoRola.mx', 'Volver.ar', 'W9.fr',
+    'WAPATV41.pr', 'WCWJ41.us', 'WIPRTV.us', 'WIPRTV61.pr', 'WTAMLD301.us', 'WarnerTV.es',
+    'WarnerTV.fr', 'WarnerTVNext.fr', 'WillaxTV.pe', 'WinSports.co', 'XTRM.es', 'XpressoJovenRadio.cr',
+    'Xtrm.es', 'ZTele.ca', 'Zeste.ca', 'ZonaLatina.cl', 'Zoom.co', 'ZurquiTV.cr',
+    'arte.fr', 'bitMe.mx',
 }
+
+PAST_DAYS, FUTURE_DAYS = 1, 6   # keep only programmes in this window (size control)
 
 def fetch(url):
     req = urllib.request.Request(url, headers={"User-Agent": "epg-merger"})
-    data = urllib.request.urlopen(req, timeout=120).read()
+    data = urllib.request.urlopen(req, timeout=180).read()
     return gzip.decompress(data) if url.endswith(".gz") else data
 
+now = datetime.datetime.now(datetime.timezone.utc)
+lo, hi = now - datetime.timedelta(days=PAST_DAYS), now + datetime.timedelta(days=FUTURE_DAYS)
+def in_window(start):
+    try:
+        dt = datetime.datetime.strptime(start[:14], "%Y%m%d%H%M%S").replace(tzinfo=datetime.timezone.utc)
+        return lo <= dt <= hi
+    except Exception:
+        return True
+
 tv = ET.Element("tv", {"generator-info-name": "epg-merger"})
-seen = set(); n = 0
+seen=set(); n=0
 for url in SOURCES:
     try:
         raw = fetch(url)
@@ -92,18 +191,15 @@ for url in SOURCES:
         print("WARN skip", url, e, file=sys.stderr); continue
     for _, el in ET.iterparse(io.BytesIO(raw), events=("end",)):
         if el.tag == "channel":
-            cid = el.get("id", "")
+            cid = el.get("id","")
             if cid in KEEP and cid not in seen:
                 seen.add(cid); tv.append(el)
-            else:
-                el.clear()
+            else: el.clear()
         elif el.tag == "programme":
-            if el.get("channel", "") in KEEP:
-                tv.append(el); n += 1
-            else:
-                el.clear()
+            if el.get("channel","") in KEEP and in_window(el.get("start","")):
+                tv.append(el); n+=1
+            else: el.clear()
 
 ET.ElementTree(tv).write("guide.xml", encoding="UTF-8", xml_declaration=True)
 print("guide.xml:", len(seen), "channels,", n, "programmes")
-if not seen:
-    sys.exit("no channels matched")
+if not seen: sys.exit("no channels matched")
